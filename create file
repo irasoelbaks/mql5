@@ -1,30 +1,23 @@
 //+------------------------------------------------------------------+
+//| Expert input: prefix instellen                                   |
+//+------------------------------------------------------------------+
+input string FilePrefix = "Trade_"; // Prefix voor bestandsnaam
+
+//+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
   {
-   string filename = "output.txt"; // Bestandsnaam
-   int file_handle = FileOpen(filename, FILE_WRITE | FILE_TXT | FILE_COMMON);
-
-   if(file_handle != INVALID_HANDLE)
-     {
-      FileWrite(file_handle, "a");
-      FileClose(file_handle);
-      Print("Bestand succesvol aangemaakt en geschreven.");
-     }
-   else
-     {
-      Print("Kon bestand niet openen.");
-     }
+   // Tekst op de chart
+   string label_name = "Trades worden ge-exporteerd...";
+   ObjectCreate(0, label_name, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, label_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, label_name, OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, label_name, OBJPROP_YDISTANCE, 10);
+   ObjectSetInteger(0, label_name, OBJPROP_FONTSIZE, 12);
+   ObjectSetString(0, label_name, OBJPROP_TEXT, "Export Trade");
 
    return(INIT_SUCCEEDED);
-  }
-
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-  {
   }
 
 //+------------------------------------------------------------------+
@@ -32,4 +25,33 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
   {
+   int total = PositionsTotal();
+   for(int i = 0; i < total; i++)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(PositionSelectByTicket(ticket))
+        {
+         string symbol = PositionGetString(POSITION_SYMBOL);
+         int type = PositionGetInteger(POSITION_TYPE);
+         string direction = (type == POSITION_TYPE_BUY) ? "Buy" : "Sell";
+
+         string filename = FilePrefix + (string)ticket + ".trade";
+         int file_handle = FileOpen(filename, FILE_WRITE | FILE_TXT);
+
+         if(file_handle != INVALID_HANDLE)
+           {
+            FileWrite(file_handle, "Symbol: " + symbol);
+            FileWrite(file_handle, "Direction: " + direction);
+            FileClose(file_handle);
+           }
+        }
+     }
+  }
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+  {
+   ObjectDelete(0, "ExportLabel");
   }
