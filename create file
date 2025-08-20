@@ -4,11 +4,10 @@
 input string FilePrefix = "Trade_";       // Prefix voor bestandsnaam
 input string ChartText = "Export Trade";  // Tekst op de chart
 
-//+------------------------------------------------------------------+
-//| Interne lijst van verwerkte trades                               |
-//+------------------------------------------------------------------+
 #include <Arrays\ArrayLong.mqh>
 CArrayLong processedTickets;
+
+string ticketLogFile = "exported_tickets.txt";
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -23,6 +22,23 @@ int OnInit()
    ObjectSetInteger(0, label_name, OBJPROP_YDISTANCE, 10);
    ObjectSetInteger(0, label_name, OBJPROP_FONTSIZE, 12);
    ObjectSetString(0, label_name, OBJPROP_TEXT, ChartText);
+
+   // Laad eerder verwerkte tickets uit bestand
+   int file_handle = FileOpen(ticketLogFile, FILE_READ | FILE_TXT);
+   if(file_handle != INVALID_HANDLE)
+     {
+      while(!FileIsEnding(file_handle))
+        {
+         string line = FileReadString(file_handle);
+         if(StringLen(line) > 0)
+           {
+            ulong ticket = (ulong)StringToInteger(line);
+            if(processedTickets.Search(ticket) == -1)
+               processedTickets.Add(ticket);
+           }
+        }
+      FileClose(file_handle);
+     }
 
    return(INIT_SUCCEEDED);
   }
@@ -55,8 +71,17 @@ void OnTick()
                FileWrite(file_handle, line);
                FileClose(file_handle);
 
-               // Voeg ticket toe aan verwerkte lijst
+               // Voeg ticket toe aan geheugenlijst
                processedTickets.Add(ticket);
+
+               // Voeg ticket toe aan persistent logbestand
+               int log_handle = FileOpen(ticketLogFile, FILE_READ | FILE_WRITE | FILE_TXT);
+               if(log_handle != INVALID_HANDLE)
+                 {
+                  FileSeek(log_handle, 0, SEEK_END);
+                  FileWrite(log_handle, (string)ticket);
+                  FileClose(log_handle);
+                 }
               }
            }
         }
