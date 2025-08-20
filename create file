@@ -1,0 +1,35 @@
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit()
+  {
+   string filename = "output.txt"; // Bestandsnaam
+   int file_handle = FileOpen(filename, FILE_WRITE | FILE_TXT | FILE_COMMON);
+
+   if(file_handle != INVALID_HANDLE)
+     {
+      FileWrite(file_handle, "a");
+      FileClose(file_handle);
+      Print("Bestand succesvol aangemaakt en geschreven.");
+     }
+   else
+     {
+      Print("Kon bestand niet openen.");
+     }
+
+   return(INIT_SUCCEEDED);
+  }
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+  {
+  }
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+  {
+  }
