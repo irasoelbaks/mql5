@@ -1,8 +1,8 @@
 //+------------------------------------------------------------------+
 //| Expert inputs                                                    |
 //+------------------------------------------------------------------+
-input string FilePrefix = "Van_";       // Prefix voor bestandsnaam
-input string ChartText = "Trades worden ge-exporteerd...";  // Tekst op de chart
+input string FilePrefix = "Trade_";       // Prefix voor bestandsnaam
+input string ChartText = "Export Trade";  // Tekst op de chart
 
 //+------------------------------------------------------------------+
 //| Interne lijst van verwerkte trades                               |
@@ -56,4 +56,17 @@ void OnTick()
                FileClose(file_handle);
 
                // Voeg ticket toe aan verwerkte lijst
-               processedTickets
+               processedTickets.Add(ticket);
+              }
+           }
+        }
+     }
+  }
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+  {
+   ObjectDelete(0, "ExportLabel");
+  }
