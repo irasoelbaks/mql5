@@ -1,8 +1,14 @@
 //+------------------------------------------------------------------+
 //| Expert inputs                                                    |
 //+------------------------------------------------------------------+
-input string FilePrefix = "Trade_";       // Prefix voor bestandsnaam
-input string ChartText = "Export Trade";  // Tekst op de chart
+input string FilePrefix = "Van_";       // Prefix voor bestandsnaam
+input string ChartText = "Trades worden ge-exporteerd...";  // Tekst op de chart
+
+//+------------------------------------------------------------------+
+//| Interne lijst van verwerkte trades                               |
+//+------------------------------------------------------------------+
+#include <Arrays\ArrayLong.mqh>
+CArrayLong processedTickets;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -30,29 +36,24 @@ void OnTick()
    for(int i = 0; i < total; i++)
      {
       ulong ticket = PositionGetTicket(i);
-      if(PositionSelectByTicket(ticket))
+
+      // Alleen doorgaan als ticket nog niet verwerkt is
+      if(processedTickets.Search(ticket) == -1)
         {
-         string symbol = PositionGetString(POSITION_SYMBOL);
-         int type = (int)PositionGetInteger(POSITION_TYPE); // typecast naar int
-         string direction = (type == POSITION_TYPE_BUY) ? "Buy" : "Sell";
-
-         string filename = FilePrefix + (string)ticket + ".trade";
-         int file_handle = FileOpen(filename, FILE_WRITE | FILE_TXT);
-
-         if(file_handle != INVALID_HANDLE)
+         if(PositionSelectByTicket(ticket))
            {
-            string line = symbol + ";" + direction;
-            FileWrite(file_handle, line);
-            FileClose(file_handle);
-           }
-        }
-     }
-  }
+            string symbol = PositionGetString(POSITION_SYMBOL);
+            int type = (int)PositionGetInteger(POSITION_TYPE);
+            string direction = (type == POSITION_TYPE_BUY) ? "Buy" : "Sell";
 
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-  {
-   ObjectDelete(0, "ExportLabel");
-  }
+            string filename = FilePrefix + (string)ticket + ".trade";
+            int file_handle = FileOpen(filename, FILE_WRITE | FILE_TXT);
+
+            if(file_handle != INVALID_HANDLE)
+              {
+               string line = symbol + ";" + direction;
+               FileWrite(file_handle, line);
+               FileClose(file_handle);
+
+               // Voeg ticket toe aan verwerkte lijst
+               processedTickets
