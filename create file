@@ -1,8 +1,9 @@
 //+------------------------------------------------------------------+
 //| Expert inputs                                                    |
 //+------------------------------------------------------------------+
-input string FilePrefix = "Trade_";       // Prefix voor bestandsnaam
-input string ChartText = "Export Trade";  // Tekst op de chart
+input string FilePrefix   = "Trade_";        // Prefix voor bestandsnaam
+input string ChartText    = "Export Trade";  // Tekst op de chart
+input bool   EnableDebug  = true;            // Debugmeldingen aan/uit
 
 #include <Arrays\ArrayLong.mqh>
 CArrayLong processedTickets;
@@ -14,19 +15,33 @@ string ticketLogFile = "exported_tickets.txt";
 //+------------------------------------------------------------------+
 int OnInit()
   {
+   if(EnableDebug) Print("EA Initialisatie gestart.");
+
    // Tekst op de chart
    string label_name = "ExportLabel";
-   ObjectCreate(0, label_name, OBJ_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, label_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-   ObjectSetInteger(0, label_name, OBJPROP_XDISTANCE, 10);
-   ObjectSetInteger(0, label_name, OBJPROP_YDISTANCE, 10);
-   ObjectSetInteger(0, label_name, OBJPROP_FONTSIZE, 12);
-   ObjectSetString(0, label_name, OBJPROP_TEXT, ChartText);
+   if(!ObjectCreate(0, label_name, OBJ_LABEL, 0, 0, 0))
+     {
+      if(EnableDebug) Print("Fout bij aanmaken van chart label.");
+     }
+   else
+     {
+      ObjectSetInteger(0, label_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, label_name, OBJPROP_XDISTANCE, 10);
+      ObjectSetInteger(0, label_name, OBJPROP_YDISTANCE, 10);
+      ObjectSetInteger(0, label_name, OBJPROP_FONTSIZE, 12);
+      ObjectSetString(0, label_name, OBJPROP_TEXT, ChartText);
+      if(EnableDebug) Print("Chart label aangemaakt: ", ChartText);
+     }
 
    // Laad eerder verwerkte tickets uit bestand
    int file_handle = FileOpen(ticketLogFile, FILE_READ | FILE_TXT);
-   if(file_handle != INVALID_HANDLE)
+   if(file_handle == INVALID_HANDLE)
      {
+      if(EnableDebug) Print("Geen bestaand logbestand gevonden: ", ticketLogFile);
+     }
+   else
+     {
+      if(EnableDebug) Print("Logbestand gevonden: ", ticketLogFile);
       while(!FileIsEnding(file_handle))
         {
          string line = FileReadString(file_handle);
@@ -34,12 +49,16 @@ int OnInit()
            {
             ulong ticket = (ulong)StringToInteger(line);
             if(processedTickets.Search(ticket) == -1)
+              {
                processedTickets.Add(ticket);
+               if(EnableDebug) Print("Ticket geladen uit log: ", ticket);
+              }
            }
         }
       FileClose(file_handle);
      }
 
+   if(EnableDebug) Print("EA Initialisatie voltooid.");
    return(INIT_SUCCEEDED);
   }
 
@@ -49,41 +68,55 @@ int OnInit()
 void OnTick()
   {
    int total = PositionsTotal();
+   if(EnableDebug) Print("Aantal actieve posities: ", total);
+
    for(int i = 0; i < total; i++)
      {
       ulong ticket = PositionGetTicket(i);
 
-      // Alleen doorgaan als ticket nog niet verwerkt is
-      if(processedTickets.Search(ticket) == -1)
+      if(processedTickets.Search(ticket) != -1)
         {
-         if(PositionSelectByTicket(ticket))
-           {
-            string symbol = PositionGetString(POSITION_SYMBOL);
-            int type = (int)PositionGetInteger(POSITION_TYPE);
-            string direction = (type == POSITION_TYPE_BUY) ? "Buy" : "Sell";
+         if(EnableDebug) Print("Ticket al verwerkt: ", ticket);
+         continue;
+        }
 
-            string filename = FilePrefix + (string)ticket + ".trade";
-            int file_handle = FileOpen(filename, FILE_WRITE | FILE_TXT);
+      if(!PositionSelectByTicket(ticket))
+        {
+         if(EnableDebug) Print("Kon positie niet selecteren voor ticket: ", ticket);
+         continue;
+        }
 
-            if(file_handle != INVALID_HANDLE)
-              {
-               string line = symbol + ";" + direction;
-               FileWrite(file_handle, line);
-               FileClose(file_handle);
+      string symbol = PositionGetString(POSITION_SYMBOL);
+      int type = (int)PositionGetInteger(POSITION_TYPE);
+      string direction = (type == POSITION_TYPE_BUY) ? "Buy" : "Sell";
 
-               // Voeg ticket toe aan geheugenlijst
-               processedTickets.Add(ticket);
+      string filename = FilePrefix + (string)ticket + ".trade";
+      int file_handle = FileOpen(filename, FILE_WRITE | FILE_TXT);
 
-               // Voeg ticket toe aan persistent logbestand
-               int log_handle = FileOpen(ticketLogFile, FILE_READ | FILE_WRITE | FILE_TXT);
-               if(log_handle != INVALID_HANDLE)
-                 {
-                  FileSeek(log_handle, 0, SEEK_END);
-                  FileWrite(log_handle, (string)ticket);
-                  FileClose(log_handle);
-                 }
-              }
-           }
+      if(file_handle == INVALID_HANDLE)
+        {
+         if(EnableDebug) Print("Fout bij openen van exportbestand: ", filename);
+         continue;
+        }
+
+      string line = symbol + ";" + direction;
+      FileWrite(file_handle, line);
+      FileClose(file_handle);
+      if(EnableDebug) Print("Trade geëxporteerd: ", line);
+
+      processedTickets.Add(ticket);
+
+      int log_handle = FileOpen(ticketLogFile, FILE_WRITE | FILE_TXT);
+      if(log_handle != INVALID_HANDLE)
+        {
+         FileSeek(log_handle, 0, SEEK_END);
+         FileWrite(log_handle, (string)ticket);
+         FileClose(log_handle);
+         if(EnableDebug) Print("Ticket toegevoegd aan logbestand: ", ticket);
+        }
+      else
+        {
+         if(EnableDebug) Print("Fout bij openen van logbestand: ", ticketLogFile);
         }
      }
   }
@@ -94,4 +127,5 @@ void OnTick()
 void OnDeinit(const int reason)
   {
    ObjectDelete(0, "ExportLabel");
+   if(EnableDebug) Print("EA gedeactiveerd.");
   }
