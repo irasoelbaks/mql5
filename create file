@@ -1,53 +1,66 @@
 //+------------------------------------------------------------------+
-//| Expert inputs                                                    |
+//|                                                Writer.mq5        |
+//|          Export open trades naar .trade, cleanup bij sluiting    |
 //+------------------------------------------------------------------+
-input string FilePrefix   = "Vantage_";        // Prefix voor bestandsnaam
-input bool   EnableDebug  = true;              // Debugmeldingen aan/uit
-input int    TimerIntervalSeconds = 10;        // Interval voor OnTimer in seconden
-input bool   UseCommonFiles = false;           // Gebruik gemeenschappelijke bestandsmap (Documents\MQL5\Files)
+#property strict
 
-#include <Arrays\ArrayLong.mqh>
+//-------------------------------
+// Expert inputs
+//-------------------------------
+input string FilePrefix            = "Telegram_";  // Prefix voor bestandsnaam
+input bool   EnableDebug           = true;         // Debugmeldingen aan/uit
+input int    TimerIntervalSeconds  = 5;            // Interval voor OnTimer in seconden
+input bool   UseCommonFiles        = true;         // Gebruik gemeenschappelijke bestandsmap (Documents\MQL5\Files)
+
+//-------------------------------
+// Data structures
+//-------------------------------
+#include <Arrays/ArrayLong.mqh>
 CArrayLong processedTickets;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
-//+------------------------------------------------------------------+
+//+------------------------------------------------------------------
 int OnInit()
   {
-   if(EnableDebug) Print("EA Initialisatie gestart.");
    EventSetTimer(TimerIntervalSeconds);
-   if(EnableDebug) Print("EA Initialisatie voltooid.");
+   if(EnableDebug) Print("🟢 EA geactiveerd. Timer elke ", TimerIntervalSeconds, "s");
    return(INIT_SUCCEEDED);
   }
 
 //+------------------------------------------------------------------+
-//| Timer-based logic                                                |
-//+------------------------------------------------------------------+
+//| Timer-based logic: exporteer nieuwe trades                       |
+//+------------------------------------------------------------------
 void OnTimer()
   {
    int total = PositionsTotal();
-   if(EnableDebug) Print("Aantal openstaande trades: ", total);
+   if(EnableDebug) Print("📊 Aantal openstaande trades: ", total);
 
-   int new_exports = 0;
+   // ✅ Zorg dat de array gesorteerd is voordat we binaire zoekactie doen
+   if(processedTickets.Total() > 1)
+      processedTickets.Sort();
 
    for(int i = 0; i < total; i++)
      {
       ulong ticket = PositionGetTicket(i);
 
-      if(processedTickets.Search(ticket) != -1)
+      // ✅ Ticket al verwerkt? Gebruik binaire zoekactie op gesorteerde array
+      if(processedTickets.Search((long)ticket) != -1)
         {
-         if(EnableDebug) Print("Ticket al verwerkt: ", ticket);
+         if(EnableDebug) Print("⏩ Ticket al verwerkt: ", ticket);
          continue;
         }
+
+      if(EnableDebug) Print("🔍 Verwerk ticket: ", ticket);
 
       if(!PositionSelectByTicket(ticket))
         {
-         if(EnableDebug) Print("Selecteren van trade lukt niet, tradeticket: ", ticket);
+         if(EnableDebug) Print("⚠️ Selecteren van trade mislukt: ", ticket);
          continue;
         }
 
-      string symbol = PositionGetString(POSITION_SYMBOL);
-      int type = (int)PositionGetInteger(POSITION_TYPE);
+      string symbol    = PositionGetString(POSITION_SYMBOL);
+      int    type      = (int)PositionGetInteger(POSITION_TYPE);
       string direction = (type == POSITION_TYPE_BUY) ? "Buy" : "Sell";
 
       string filename = FilePrefix + (string)ticket + ".trade";
@@ -55,39 +68,92 @@ void OnTimer()
       int file_flags = FILE_WRITE | FILE_TXT | FILE_ANSI;
       if(UseCommonFiles) file_flags |= FILE_COMMON;
 
-      // Check of bestand al bestaat
       if(FileIsExist(filename, UseCommonFiles ? FILE_COMMON : 0))
         {
-         if(EnableDebug) Print("Bestand bestaat al, overslaan: ", filename);
-         processedTickets.Add(ticket); // Voeg toch toe zodat we het niet blijven checken
-         continue;
+         if(EnableDebug) Print("📁 Bestand bestaat al, overslaan: ", filename);
         }
-
-      int file_handle = FileOpen(filename, file_flags);
-      if(file_handle == INVALID_HANDLE)
+      else
         {
-         if(EnableDebug) Print("Fout bij openen van exportbestand: ", filename, " (Errorcode: ", GetLastError(), ")");
-         continue;
+         ResetLastError();
+         int file_handle = FileOpen(filename, file_flags);
+         if(file_handle == INVALID_HANDLE)
+           {
+            if(EnableDebug) Print("❌ Fout bij openen van bestand: ", filename,
+                                  " (Errorcode: ", GetLastError(), ")");
+            continue;
+           }
+
+         string line = symbol + ";" + direction;
+         FileWrite(file_handle, line);
+         FileClose(file_handle);
+         if(EnableDebug) Print("✅ Trade geëxporteerd: ", line, " → ", filename);
         }
 
-      string line = symbol + ";" + direction;
-      FileWrite(file_handle, line);
-      FileClose(file_handle);
-      if(EnableDebug) Print("Schrijf: ", line, " naar ", filename );
+      // ✅ Ticket toevoegen en array gesorteerd houden (voor binaire Search)
+      processedTickets.Add((long)ticket);
+      if(processedTickets.Total() > 1)
+         processedTickets.Sort();
 
-      processedTickets.Add(ticket);
-      new_exports++;
+      if(EnableDebug) Print("🧠 Ticket toegevoegd aan geheugen: ", ticket);
      }
+  }
 
-   if(EnableDebug) Print("Aantal nieuw geëxporteerde trades deze cyclus: ", new_exports);
+//+------------------------------------------------------------------+
+//| Tick-based logic: verwijder .trade-bestand bij sluiting          |
+//+------------------------------------------------------------------
+void OnTick()
+  {
+   int i = processedTickets.Total() - 1;
+   while(i >= 0)
+     {
+      ulong ticket = (ulong)processedTickets.At(i);
+      bool stillOpen = false;
+
+      for(int j = 0; j < PositionsTotal(); j++)
+        {
+         if(PositionGetTicket(j) == ticket)
+           {
+            stillOpen = true;
+            break;
+           }
+        }
+
+      if(!stillOpen)
+        {
+         string filename = FilePrefix + (string)ticket + ".trade";
+         if(EnableDebug) Print("🧹 Gesloten trade gevonden: ", ticket);
+
+         if(FileIsExist(filename, UseCommonFiles ? FILE_COMMON : 0))
+           {
+            if(FileDelete(filename, UseCommonFiles ? FILE_COMMON : 0))
+              {
+               if(EnableDebug) Print("🗑️ Bestand verwijderd: ", filename);
+              }
+            else
+              {
+               if(EnableDebug) Print("❌ Kon bestand niet verwijderen: ", filename,
+                                     " (Errorcode: ", GetLastError(), ")");
+              }
+           }
+         else
+           {
+            if(EnableDebug) Print("📁 Bestand bestaat niet meer: ", filename);
+           }
+
+         processedTickets.Delete(i);
+         if(EnableDebug) Print("🧠 Ticket verwijderd uit geheugen: ", ticket);
+        }
+
+      i--;
+     }
   }
 
 //+------------------------------------------------------------------+
 //| Expert deinitialization function                                 |
-//+------------------------------------------------------------------+
+//+------------------------------------------------------------------
 void OnDeinit(const int reason)
   {
    EventKillTimer();
-   ObjectDelete(0, "ExportLabel");
-   if(EnableDebug) Print("EA gedeactiveerd.");
+   if(EnableDebug) Print("🔴 EA gedeactiveerd.");
   }
+//+------------------------------------------------------------------+
